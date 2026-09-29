@@ -1,0 +1,1435 @@
+<!doctype html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f2e9">
+  <title>Menu Matcher</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f5f2e9;
+      --surface: #fffdf8;
+      --ink: #202622;
+      --muted: #73786f;
+      --line: #dcded4;
+      --green: #315b46;
+      --green-soft: #e6eee6;
+      --coral: #d66f52;
+      --coral-soft: #f8e8df;
+      --yellow: #edc963;
+      --shadow: 0 12px 34px rgba(37, 49, 39, .07);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.5 "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    body.dark {
+      color-scheme: dark;
+      --paper: #171d19;
+      --surface: #222a24;
+      --ink: #f0efe6;
+      --muted: #a9b0a6;
+      --line: #3b463e;
+      --green: #a5c5a7;
+      --green-soft: #2c3c30;
+      --coral: #f19575;
+      --coral-soft: #462f29;
+      --yellow: #e2c467;
+      --shadow: 0 12px 34px rgba(0, 0, 0, .18);
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: color-mix(in srgb, var(--paper) 93%, transparent);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .top-inner {
+      width: min(1180px, 100%);
+      margin: auto;
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-right: auto;
+      min-width: 185px;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50% 50% 44% 44%;
+      color: #fff;
+      background: var(--green);
+      font: 20px Georgia, serif;
+      transform: rotate(-8deg);
+    }
+
+    .brand strong {
+      display: block;
+      font: 600 19px/1.05 Georgia, serif;
+      letter-spacing: 0;
+    }
+
+    .brand small {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .profile-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .profile-box label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .profile-box input {
+      width: 116px;
+      padding: 7px 9px;
+    }
+
+    .connection {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #d15d4e;
+      box-shadow: 0 0 0 3px color-mix(in srgb, #d15d4e 15%, transparent);
+    }
+
+    .dot.connecting {
+      background: #d5a934;
+      box-shadow: 0 0 0 3px color-mix(in srgb, #d5a934 18%, transparent);
+    }
+
+    .dot.connected {
+      background: #4c9a63;
+      box-shadow: 0 0 0 3px color-mix(in srgb, #4c9a63 18%, transparent);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn,
+    .icon-btn {
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: var(--surface);
+      border-radius: 5px;
+      padding: 8px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .btn:hover,
+    .icon-btn:hover {
+      border-color: var(--green);
+      transform: translateY(-1px);
+    }
+
+    .btn.primary {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+
+    body.dark .btn.primary {
+      color: #18211a;
+    }
+
+    .btn.subtle {
+      background: transparent;
+    }
+
+    .btn.danger {
+      color: var(--coral);
+    }
+
+    .btn:disabled {
+      opacity: .42;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      font-size: 16px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 10px 11px;
+      background: var(--surface);
+      color: var(--ink);
+      outline: none;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 13%, transparent);
+    }
+
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+
+    .peer-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      padding-left: 12px;
+      border-left: 1px solid var(--line);
+    }
+
+    .peer-tools input {
+      width: 98px;
+      padding: 8px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 2px;
+    }
+
+    .session-code {
+      color: var(--green);
+      font: 700 15px/1 Georgia, serif;
+      letter-spacing: 2px;
+      min-width: 55px;
+    }
+
+    main {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 26px 20px 60px;
+    }
+
+    .intro {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 20px;
+      padding: 14px 0 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--coral);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin: 3px 0 0;
+      font: 400 clamp(30px, 5vw, 46px)/1.05 Georgia, serif;
+      letter-spacing: 0;
+    }
+
+    .intro-copy {
+      margin: 0;
+      max-width: 300px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 18px 0 14px;
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+
+    .tab {
+      position: relative;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tab[aria-selected="true"] {
+      color: var(--green);
+    }
+
+    .tab[aria-selected="true"]::after {
+      position: absolute;
+      right: 14px;
+      bottom: -15px;
+      left: 14px;
+      height: 3px;
+      content: "";
+      background: var(--coral);
+    }
+
+    .tab-count {
+      display: inline-grid;
+      place-items: center;
+      min-width: 20px;
+      height: 20px;
+      margin-left: 5px;
+      padding: 0 5px;
+      border-radius: 10px;
+      background: var(--green-soft);
+      font-size: 10px;
+    }
+
+    .panel {
+      display: none;
+      padding-top: 24px;
+      animation: arrive .28s ease both;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    @keyframes arrive {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font: 400 27px/1.1 Georgia, serif;
+    }
+
+    .section-head p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .option-layout {
+      display: grid;
+      grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .form-panel {
+      padding: 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--coral);
+      box-shadow: var(--shadow);
+    }
+
+    .form-panel h3 {
+      margin-bottom: 15px;
+      font: 400 20px Georgia, serif;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .form-actions .btn {
+      flex: 1;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      min-width: 660px;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      background: color-mix(in srgb, var(--surface) 80%, var(--paper));
+    }
+
+    td {
+      font-size: 12px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .title-cell {
+      min-width: 145px;
+      font-weight: 700;
+    }
+
+    .description-cell {
+      max-width: 260px;
+      color: var(--muted);
+    }
+
+    .category-tag {
+      display: inline-block;
+      padding: 4px 7px;
+      color: var(--green);
+      background: var(--green-soft);
+      border-radius: 2px;
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 5px;
+    }
+
+    .empty {
+      padding: 30px 16px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .progress-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .progress-item {
+      padding: 12px 14px;
+      background: var(--green-soft);
+      border-left: 3px solid var(--green);
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .progress-label strong {
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .progress-track {
+      height: 5px;
+      margin-top: 8px;
+      overflow: hidden;
+      border-radius: 5px;
+      background: color-mix(in srgb, var(--green) 15%, var(--surface));
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--coral);
+      transition: width .25s ease;
+    }
+
+    .vote-group {
+      margin: 18px 0 25px;
+    }
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 9px;
+      font: 400 19px Georgia, serif;
+    }
+
+    .group-title::after {
+      height: 1px;
+      flex: 1;
+      content: "";
+      background: var(--line);
+    }
+
+    .vote-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .vote-row:first-of-type {
+      border-top: 1px solid var(--line);
+    }
+
+    .vote-title {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .vote-description {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .vote-controls {
+      display: flex;
+      gap: 3px;
+      padding: 3px;
+      background: var(--paper);
+      border-radius: 4px;
+    }
+
+    .vote-btn {
+      min-width: 62px;
+      padding: 6px 8px;
+      border: 0;
+      border-radius: 3px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .vote-btn[aria-pressed="true"][data-vote="yes"] {
+      color: #fff;
+      background: #43805a;
+    }
+
+    .vote-btn[aria-pressed="true"][data-vote="maybe"] {
+      color: #4a3a12;
+      background: var(--yellow);
+    }
+
+    .vote-btn[aria-pressed="true"][data-vote="no"] {
+      color: #fff;
+      background: var(--coral);
+    }
+
+    .menu-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .eligibility {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .menu-sheet {
+      max-width: 760px;
+      min-height: 220px;
+      margin: 20px auto;
+      padding: clamp(22px, 6vw, 54px);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .menu-sheet.generated {
+      border-top: 5px solid var(--coral);
+    }
+
+    .menu-brand {
+      padding-bottom: 19px;
+      border-bottom: 1px solid var(--line);
+      text-align: center;
+    }
+
+    .menu-brand .eyebrow {
+      letter-spacing: 2px;
+    }
+
+    .menu-brand h2 {
+      margin: 5px 0 0;
+      font: 400 36px/1.1 Georgia, serif;
+    }
+
+    .menu-date {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .menu-category {
+      margin: 24px 0 0;
+    }
+
+    .menu-category h3 {
+      margin-bottom: 10px;
+      color: var(--coral);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .menu-dish {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 9px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .menu-dish strong {
+      font: 400 17px Georgia, serif;
+    }
+
+    .menu-dish p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .menu-note {
+      color: var(--muted);
+      text-align: center;
+      padding: 32px 12px;
+      font-size: 13px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 10;
+      max-width: min(360px, calc(100vw - 36px));
+      padding: 11px 15px;
+      color: #fff;
+      background: #253d30;
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: .2s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 800px) {
+      .top-inner {
+        gap: 10px;
+        padding: 10px 14px;
+      }
+
+      .brand {
+        flex: 1;
+      }
+
+      .profile-box {
+        order: 2;
+      }
+
+      .toolbar {
+        order: 3;
+        width: 100%;
+      }
+
+      .peer-tools {
+        padding-left: 0;
+        border-left: 0;
+      }
+
+      main {
+        padding: 18px 14px 40px;
+      }
+
+      .option-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .form-panel {
+        order: 0;
+      }
+
+      .section-head {
+        align-items: start;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .connection {
+        order: 1;
+      }
+
+      .brand {
+        min-width: auto;
+      }
+
+      .brand strong {
+        font-size: 17px;
+      }
+
+      .profile-box {
+        width: 100%;
+        order: 2;
+      }
+
+      .profile-box input {
+        flex: 1;
+      }
+
+      .toolbar {
+        order: 3;
+        gap: 5px;
+      }
+
+      .toolbar>.btn {
+        flex: 1 1 auto;
+      }
+
+      .peer-tools {
+        width: 100%;
+      }
+
+      .intro {
+        align-items: start;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .intro-copy {
+        max-width: none;
+      }
+
+      .progress-strip {
+        gap: 6px;
+      }
+
+      .progress-item {
+        padding: 10px;
+      }
+
+      .vote-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+        padding: 11px 9px;
+      }
+
+      .vote-controls {
+        grid-column: 1;
+        grid-row: 3;
+        justify-content: stretch;
+      }
+
+      .vote-btn {
+        flex: 1;
+      }
+
+      .menu-toolbar {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .menu-sheet {
+        margin: 14px 0;
+      }
+
+      .menu-brand h2 {
+        font-size: 30px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="top-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">M</span>
+        <div><strong>Menu Matcher</strong><small>Gemeinsam entscheiden</small></div>
+      </div>
+      <div class="profile-box"><label for="profileName">Dein Name</label><input id="profileName" maxlength="32"
+          autocomplete="nickname" aria-label="Dein Name"></div>
+      <div class="connection" aria-live="polite"><span id="statusDot" class="dot"></span><span
+          id="connectionStatus">Nicht verbunden</span></div>
+      <div class="toolbar">
+        <div class="peer-tools">
+          <button class="btn primary" id="createSession">Session erstellen</button>
+          <span class="session-code" id="sessionCode" aria-label="Session-Code">------</span>
+          <input id="peerCode" inputmode="numeric" maxlength="6" placeholder="Code"
+            aria-label="6-stelliger Session-Code">
+          <button class="btn" id="connectSession">Verbinden</button>
+          <button class="btn subtle" id="resync" title="Gesamten Stand erneut abgleichen">Abgleichen</button>
+        </div>
+        <button class="icon-btn" id="themeToggle" title="Dark Mode umschalten"
+          aria-label="Dark Mode umschalten">◐</button>
+        <button class="btn subtle" id="exportJson">JSON exportieren</button>
+        <button class="btn subtle" id="importJson">JSON importieren</button>
+        <input id="importFile" class="visually-hidden" type="file" accept="application/json,.json">
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="intro">
+      <div>
+        <div class="eyebrow">Was machen wir heute Abend?</div>
+        <h1>Ein guter Abend<br>fängt hier an.</h1>
+      </div>
+      <p class="intro-copy">Sammelt Ideen, stimmt gemeinsam ab und stellt aus euren Favoriten ein Menü zusammen.</p>
+    </section>
+    <nav class="tabs" role="tablist" aria-label="Menüplanung">
+      <button class="tab" id="tab-options" role="tab" aria-controls="panel-options" aria-selected="true">Mögliche Ideen
+        <span class="tab-count" id="optionCount">0</span></button>
+      <button class="tab" id="tab-voting" role="tab" aria-controls="panel-voting"
+        aria-selected="false">Abstimmung</button>
+      <button class="tab" id="tab-menu" role="tab" aria-controls="panel-menu" aria-selected="false">Menü</button>
+    </nav>
+    <section class="panel active" id="panel-options" role="tabpanel" aria-labelledby="tab-options">
+      <div class="section-head">
+        <div>
+          <h2>Mögliche Ideen</h2>
+          <p>Jedes gute Date beginnt mit Möglichkeiten.</p>
+        </div>
+      </div>
+      <div class="option-layout">
+        <form class="form-panel" id="optionForm">
+          <h3 id="formHeading">Idee hinzufügen</h3>
+          <input type="hidden" id="editingId">
+          <div class="field"><label for="optionTitle">Titel</label><input id="optionTitle" required maxlength="90"
+              placeholder="z. B. ein Brettspiel spielen"></div>
+          <div class="field"><label for="optionDescription">Beschreibung</label><textarea id="optionDescription"
+              maxlength="280" placeholder="Was macht den Vorschlag besonders?"></textarea></div>
+          <div class="field"><label for="optionCategory">Kategorie</label><select id="optionCategory" required>
+              <option value="apperitiv">Apperitiv</option>
+              <option value="hauptgericht">Hauptgericht</option>
+              <option value="dessert">Dessert</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select></div>
+          <div class="form-actions"><button class="btn primary" id="saveOption" type="submit">Idee
+              speichern</button><button class="btn subtle" id="cancelEdit" type="button" hidden>Abbrechen</button></div>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Titel</th>
+                <th>Beschreibung</th>
+                <th>Kategorie</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="optionsTable"></tbody>
+          </table>
+          <div class="empty" id="optionsEmpty">Noch keine Ideen. Tragt euren ersten Favoriten ein.</div>
+        </div>
+      </div>
+    </section>
+    <section class="panel" id="panel-voting" role="tabpanel" aria-labelledby="tab-voting">
+      <div class="section-head">
+        <div>
+          <h2>Was klingt gut?</h2>
+          <p>Deine Stimme bleibt privat. Stimmt jede Idee für euch ab.</p>
+        </div>
+      </div>
+      <div class="progress-strip" id="voteProgress"></div>
+      <div id="voteGroups"></div>
+    </section>
+    <section class="panel" id="panel-menu" role="tabpanel" aria-labelledby="tab-menu">
+      <div class="section-head">
+        <div>
+          <h2>Der gemeinsame Nenner</h2>
+          <p>Aus euren Ja- und Vielleicht-Stimmen wird eine Auswahl zusammengestellt.</p>
+        </div>
+      </div>
+      <div class="menu-toolbar"><button class="btn primary" id="generateMenu" disabled>Menü generieren</button><button
+          class="btn" id="exportPng" disabled>PNG herunterladen</button><span class="eligibility"
+          id="eligibilityText"></span></div>
+      <div class="menu-sheet" id="menuSheet">
+        <div class="menu-note">Euer Menü erscheint hier, sobald ihr beide mindestens drei Gerichte mit Ja bewertet habt.
+        </div>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    (() => {
+      "use strict";
+      const STORAGE_KEY = "menu-matcher-state-v1";
+      const CATEGORIES = ["apperitiv", "hauptgericht", "dessert", "sonstiges"];
+      const CATEGORY_LABELS = { apperitiv: "Apperitiv", hauptgericht: "Hauptgericht", dessert: "Dessert", sonstiges: "Sonstiges" };
+      const VOTE_LABELS = { yes: "Ja", maybe: "Vielleicht", no: "Nein" };
+      const $ = (id) => document.getElementById(id);
+      const makeId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const freshState = () => ({
+        profile: { id: makeId(), name: "Gast" }, participants: {}, options: [], deletedOptions: [], votes: {}, voteEpoch: 0, settings: { darkMode: false }
+      });
+      function normalizeState(value) {
+        const base = freshState();
+        const input = value && typeof value === "object" ? value : {};
+        const state = {
+          profile: { id: String(input.profile?.id || base.profile.id), name: String(input.profile?.name || "Gast").slice(0, 32) },
+          participants: input.participants && typeof input.participants === "object" ? { ...input.participants } : {},
+          options: Array.isArray(input.options) ? input.options.filter((o) => o && o.id && CATEGORIES.includes(o.category)).map((o) => ({
+            id: String(o.id), title: String(o.title || "").slice(0, 90), description: String(o.description || "").slice(0, 280), category: o.category,
+            createdBy: String(o.createdBy || "Unbekannt"), updatedAt: Number(o.updatedAt) || 0
+          })) : [],
+          deletedOptions: Array.isArray(input.deletedOptions) ? input.deletedOptions.filter((x) => x && x.id).map((x) => ({ id: String(x.id), deletedAt: Number(x.deletedAt) || 0 })) : [],
+          votes: input.votes && typeof input.votes === "object" ? input.votes : {},
+          voteEpoch: Math.max(0, Number(input.voteEpoch) || 0),
+          settings: { darkMode: Boolean(input.settings?.darkMode) }
+        };
+        state.participants[state.profile.id] = state.profile.name;
+        for (const [optionId, votes] of Object.entries(state.votes)) {
+          if (!votes || typeof votes !== "object") { delete state.votes[optionId]; continue; }
+          for (const [userId, vote] of Object.entries(votes)) if (!["yes", "maybe", "no"].includes(vote)) delete votes[userId];
+        }
+        return state;
+      }
+      function stable(value) {
+        if (Array.isArray(value)) return value.map(stable);
+        if (!value || typeof value !== "object") return value;
+        return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+      }
+      function mergeStates(local, remoteValue) {
+        const remote = normalizeState(remoteValue);
+        const result = normalizeState(local);
+        const tombstones = new Map();
+        for (const item of [...result.deletedOptions, ...remote.deletedOptions]) tombstones.set(item.id, Math.max(tombstones.get(item.id) || 0, item.deletedAt));
+        const options = new Map();
+        for (const item of [...result.options, ...remote.options]) {
+          const current = options.get(item.id);
+          if (!current || item.updatedAt > current.updatedAt) options.set(item.id, item);
+        }
+        result.options = [...options.values()].filter((item) => (tombstones.get(item.id) || 0) < item.updatedAt);
+        result.deletedOptions = [...tombstones].map(([id, deletedAt]) => ({ id, deletedAt }));
+        result.participants = { ...result.participants, ...remote.participants };
+        result.participants[result.profile.id] = result.profile.name;
+        if (remote.voteEpoch > result.voteEpoch) {
+          result.voteEpoch = remote.voteEpoch;
+          result.votes = { ...remote.votes };
+        } else if (remote.voteEpoch === result.voteEpoch) {
+          result.votes = { ...result.votes };
+          for (const [optionId, votes] of Object.entries(remote.votes)) result.votes[optionId] = { ...(result.votes[optionId] || {}), ...votes };
+        }
+        result.settings.darkMode = remote.settings.darkMode;
+        return normalizeState(result);
+      }
+      function loadState() {
+        try { const saved = localStorage.getItem(STORAGE_KEY); return normalizeState(saved ? JSON.parse(saved) : freshState()); }
+        catch { return freshState(); }
+      }
+      let state = loadState();
+      let peer = null;
+      let connection = null;
+      let syncTimer = 0;
+      let syncPaused = false;
+      let importSyncId = null;
+      let remoteImportSyncId = null;
+      let importSyncTimer = 0;
+      let toastTimer = 0;
+      let generatedMenu = false;
+
+      function saveState(sync = true) {
+        state = normalizeState(state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        render();
+        if (sync) scheduleSync();
+      }
+      function notify(message) {
+        $("toast").textContent = message;
+        $("toast").classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => $("toast").classList.remove("show"), 2600);
+      }
+      function setStatus(status, text) {
+        $("statusDot").className = `dot ${status}`;
+        $("connectionStatus").textContent = text;
+      }
+      function scheduleSync() {
+        if (syncPaused) return;
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(sendState, 160);
+      }
+      function setSyncPaused(paused) {
+        syncPaused = paused;
+        document.querySelectorAll("#profileName, #themeToggle, #importJson, #optionForm input:not([type=hidden]), #optionForm textarea, #optionForm select, #optionForm button, #voteGroups button").forEach((control) => {
+          control.disabled = paused;
+        });
+        if (!paused) renderMenuState();
+      }
+      function sendState() {
+        if (connection?.open && !syncPaused) {
+          try { connection.send({ type: "state", state }); }
+          catch { setStatus("connecting", "Sync wird wiederholt"); }
+        }
+      }
+      function applyImportedIdeas(remoteValue) {
+        const remote = normalizeState(remoteValue);
+        const localProfile = { ...state.profile };
+        state = normalizeState({
+          profile: localProfile,
+          participants: { [remote.profile.id]: remote.profile.name, [localProfile.id]: localProfile.name },
+          options: remote.options,
+          deletedOptions: remote.deletedOptions,
+          votes: {},
+          voteEpoch: remote.voteEpoch,
+          settings: state.settings
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        render();
+      }
+      function sendIdeasReset(transferId) {
+        if (connection?.open) {
+          try { connection.send({ type: "ideas-reset", transferId, state }); return true; }
+          catch { setStatus("connecting", "Sync wird wiederholt"); }
+        }
+        return false;
+      }
+      function attachConnection(conn) {
+        if (connection && connection !== conn) connection.close();
+        connection = conn;
+        setStatus("connecting", "Verbinde");
+        conn.on("open", () => {
+          setStatus("connected", "Verbunden");
+          sendState();
+          notify("Verbindung hergestellt");
+        });
+        conn.on("data", (packet) => {
+          if (!packet) return;
+          if (packet.type === "ideas-reset" && packet.state && packet.transferId) {
+            if (syncPaused && remoteImportSyncId !== packet.transferId) return;
+            setSyncPaused(true);
+            remoteImportSyncId = packet.transferId;
+            applyImportedIdeas(packet.state);
+            setSyncPaused(true);
+            try { conn.send({ type: "ideas-reset-ack", transferId: packet.transferId, state }); }
+            catch { setStatus("connecting", "Sync wird wiederholt"); }
+            return;
+          }
+          if (packet.type === "ideas-reset-ack" && packet.transferId === importSyncId && packet.state) {
+            clearTimeout(importSyncTimer);
+            applyImportedIdeas(packet.state);
+            try { conn.send({ type: "ideas-reset-commit", transferId: packet.transferId }); }
+            catch { setStatus("connecting", "Sync wird wiederholt"); return; }
+            importSyncId = null;
+            setSyncPaused(false);
+            notify("Import abgeglichen. Abstimmungsergebnisse zurückgesetzt.");
+            return;
+          }
+          if (packet.type === "ideas-reset-commit" && packet.transferId === remoteImportSyncId) {
+            remoteImportSyncId = null;
+            setSyncPaused(false);
+            notify("Import abgeglichen. Abstimmungsergebnisse zurückgesetzt.");
+            return;
+          }
+          if (packet.type !== "state" || !packet.state || syncPaused) return;
+          const before = JSON.stringify(stable(state));
+          state = mergeStates(state, packet.state);
+          const after = JSON.stringify(stable(state));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          render();
+          if (before !== after) scheduleSync();
+        });
+        conn.on("close", () => {
+          if (connection === conn) {
+            connection = null;
+            clearTimeout(importSyncTimer);
+            importSyncId = null;
+            remoteImportSyncId = null;
+            setSyncPaused(false);
+            setStatus("", "Nicht verbunden");
+          }
+        });
+        conn.on("error", () => setStatus("connecting", "Verbindung gestört"));
+      }
+      function closePeer() {
+        if (connection) { connection.close(); connection = null; }
+        if (peer) { peer.destroy(); peer = null; }
+      }
+      function createSession() {
+        if (!window.Peer) return notify("PeerJS konnte nicht geladen werden. Prüfe deine Internetverbindung.");
+        closePeer();
+        setStatus("connecting", "Session wird erstellt");
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        peer = new Peer(code, { debug: 0 });
+        peer.on("open", (id) => { $("sessionCode").textContent = id; setStatus("", "Nicht verbunden"); notify("Session bereit. Teile den Code."); });
+        peer.on("connection", attachConnection);
+        peer.on("error", (error) => {
+          setStatus("", "Nicht verbunden");
+          notify(error.type === "unavailable-id" ? "Dieser Session-Code ist belegt. Erstelle eine neue Session." : `PeerJS: ${error.type || "Verbindungsfehler"}`);
+        });
+        peer.on("disconnected", () => { if (peer && !peer.destroyed) peer.reconnect(); });
+      }
+      function connectSession() {
+        const code = $("peerCode").value.trim();
+        if (!/^\d{6}$/.test(code)) return notify("Bitte einen 6-stelligen Session-Code eingeben.");
+        if (!window.Peer) return notify("PeerJS konnte nicht geladen werden. Prüfe deine Internetverbindung.");
+        closePeer();
+        setStatus("connecting", "Verbinde");
+        peer = new Peer({ debug: 0 });
+        peer.on("open", () => attachConnection(peer.connect(code, { reliable: true })));
+        peer.on("error", (error) => { setStatus("", "Nicht verbunden"); notify(`PeerJS: ${error.type || "Verbindungsfehler"}`); });
+      }
+      function participants() { return Object.entries(state.participants).sort(([a], [b]) => a.localeCompare(b)); }
+      function ownVote(optionId) { return state.votes[optionId]?.[state.profile.id] || ""; }
+      function yesCount(userId) { return state.options.filter((option) => state.votes[option.id]?.[userId] === "yes").length; }
+      function renderOptions() {
+        const body = $("optionsTable");
+        body.replaceChildren();
+        const sorted = [...state.options].sort((a, b) => CATEGORIES.indexOf(a.category) - CATEGORIES.indexOf(b.category) || a.title.localeCompare(b.title, "de"));
+        $("optionCount").textContent = String(sorted.length);
+        $("optionsEmpty").hidden = sorted.length > 0;
+        for (const option of sorted) {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td class="title-cell"></td><td class="description-cell"></td><td><span class="category-tag"></span></td><td><div class="row-actions"><button class="btn" data-edit="${escapeAttr(option.id)}" aria-label="Bearbeiten">Bearbeiten</button><button class="btn danger" data-delete="${escapeAttr(option.id)}" aria-label="Löschen">Löschen</button></div></td>`;
+          row.children[0].textContent = option.title;
+          row.children[1].textContent = option.description || "—";
+          row.querySelector(".category-tag").textContent = CATEGORY_LABELS[option.category];
+          body.append(row);
+        }
+      }
+      function renderVoting() {
+        const people = participants();
+        const progress = $("voteProgress");
+        progress.replaceChildren();
+        for (const [id, name] of people.slice(0, 2)) {
+          const count = yesCount(id);
+          const item = document.createElement("div");
+          item.className = "progress-item";
+          item.innerHTML = `<div class="progress-label"><span></span><strong></strong></div><div class="progress-track"><div class="progress-fill"></div></div>`;
+          item.querySelector(".progress-label span").textContent = name;
+          item.querySelector(".progress-label strong").textContent = `${count} Ja`;
+          item.querySelector(".progress-fill").style.width = `${Math.min(count / 3 * 100, 100)}%`;
+          progress.append(item);
+        }
+        if (people.length < 2) {
+          const waiting = document.createElement("div");
+          waiting.className = "progress-item";
+          waiting.innerHTML = '<div class="progress-label"><span>Partner</span><strong>Wartet auf Verbindung</strong></div><div class="progress-track"><div class="progress-fill" style="width:0"></div></div>';
+          progress.append(waiting);
+        }
+        const groups = $("voteGroups");
+        groups.replaceChildren();
+        for (const category of CATEGORIES) {
+          const options = state.options.filter((o) => o.category === category).sort((a, b) => a.title.localeCompare(b.title, "de"));
+          if (!options.length) continue;
+          const section = document.createElement("section");
+          section.className = "vote-group";
+          const title = document.createElement("h3"); title.className = "group-title"; title.textContent = CATEGORY_LABELS[category]; section.append(title);
+          for (const option of options) {
+            const row = document.createElement("div"); row.className = "vote-row";
+            const details = document.createElement("div"); details.innerHTML = '<div class="vote-title"></div><div class="vote-description"></div>';
+            details.querySelector(".vote-title").textContent = option.title;
+            details.querySelector(".vote-description").textContent = option.description;
+            row.append(details);
+            const controls = document.createElement("div"); controls.className = "vote-controls";
+            for (const vote of ["yes", "maybe", "no"]) {
+              const button = document.createElement("button"); button.className = "vote-btn"; button.type = "button"; button.dataset.vote = vote; button.dataset.option = option.id;
+              button.setAttribute("aria-pressed", String(ownVote(option.id) === vote)); button.textContent = VOTE_LABELS[vote]; controls.append(button);
+            }
+            row.append(controls);
+            section.append(row);
+          }
+          groups.append(section);
+        }
+        if (!groups.childElementCount) groups.innerHTML = '<div class="empty">Legt zuerst Ideen an, dann könnt ihr abstimmen.</div>';
+      }
+      function canGenerate() {
+        const people = participants();
+        return people.length >= 2 && people.slice(0, 2).every(([id]) => yesCount(id) >= 3);
+      }
+      function renderMenuState() {
+        const eligible = canGenerate();
+        $("generateMenu").disabled = !eligible;
+        $("eligibilityText").textContent = eligible ? "Bereit für eure Menüauswahl." : "Ihr braucht beide mindestens 3 Ja-Stimmen.";
+        $("exportPng").disabled = !generatedMenu;
+      }
+      function render() {
+        document.body.classList.toggle("dark", state.settings.darkMode);
+        $("profileName").value = state.profile.name;
+        renderOptions(); renderVoting(); renderMenuState();
+      }
+      function escapeAttr(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
+      function resetForm() {
+        $("optionForm").reset(); $("editingId").value = ""; $("formHeading").textContent = "Idee hinzufügen";
+        $("saveOption").textContent = "Idee speichern"; $("cancelEdit").hidden = true;
+      }
+      function showTab(name) {
+        for (const tab of document.querySelectorAll(".tab")) {
+          const selected = tab.id === `tab-${name}`;
+          tab.setAttribute("aria-selected", String(selected));
+          $(tab.getAttribute("aria-controls")).classList.toggle("active", selected);
+        }
+      }
+      function generateMenu() {
+        if (!canGenerate()) return;
+        const ids = participants().map(([id]) => id).slice(0, 2);
+        const menu = {};
+        for (const category of CATEGORIES) {
+          const ranked = state.options.map((option) => {
+            if (option.category !== category) return null;
+            const [a, b] = ids.map((id) => state.votes[option.id]?.[id]);
+            if (!a || !b || a === "no" || b === "no" || (a === "maybe" && b === "maybe")) return null;
+            const rank = a === "yes" && b === "yes" ? 3 : a === "yes" && b === "maybe" ? 2 : a === "maybe" && b === "yes" ? 1 : 0;
+            return rank ? { option, rank } : null;
+          }).filter(Boolean).sort((a, b) => b.rank - a.rank || a.option.title.localeCompare(b.option.title, "de")).slice(0, 2);
+          if (ranked.length) menu[category] = ranked.map(({ option }) => option);
+        }
+        const sheet = $("menuSheet"); sheet.classList.add("generated"); sheet.replaceChildren();
+        const brand = document.createElement("div"); brand.className = "menu-brand";
+        brand.innerHTML = '<div class="eyebrow">Euer gemeinsamer Genussplan</div><h2>Das Menü</h2><div class="menu-date"></div>';
+        brand.querySelector(".menu-date").textContent = new Intl.DateTimeFormat("de-DE", { dateStyle: "long" }).format(new Date()); sheet.append(brand);
+        let total = 0;
+        for (const category of CATEGORIES) {
+          const items = menu[category] || []; total += items.length;
+          if (!items.length) continue;
+          const group = document.createElement("section"); group.className = "menu-category";
+          const heading = document.createElement("h3"); heading.textContent = CATEGORY_LABELS[category]; group.append(heading);
+          for (const option of items) {
+            const dish = document.createElement("div"); dish.className = "menu-dish";
+            const info = document.createElement("div"); info.innerHTML = '<strong></strong><p></p>';
+            info.querySelector("strong").textContent = option.title; info.querySelector("p").textContent = option.description;
+            dish.append(info); group.append(dish);
+          }
+          sheet.append(group);
+        }
+        if (!total) { const note = document.createElement("div"); note.className = "menu-note"; note.textContent = "Noch keine passenden Gerichte. Stimmt in weiteren Kategorien ab."; sheet.append(note); }
+        generatedMenu = true; renderMenuState();
+      }
+      function downloadFile(filename, blob) {
+        const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = filename; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      function exportJson() {
+        downloadFile("menu_matcher_backup.json", new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
+      }
+      async function importJson(file) {
+        try {
+          const parsed = JSON.parse(await file.text());
+          if (!parsed || typeof parsed !== "object" || !parsed.profile || !Array.isArray(parsed.options)) throw new Error("Ungültiges Backup-Format");
+          if (!confirm("Der aktuelle Stand wird durch das Backup ersetzt. Fortfahren?")) return;
+          const localProfile = { ...state.profile };
+          state = normalizeState({
+            ...parsed,
+            profile: localProfile,
+            participants: { [localProfile.id]: localProfile.name },
+            votes: {},
+            voteEpoch: Math.max(state.voteEpoch, Number(parsed.voteEpoch) || 0) + 1,
+            settings: state.settings
+          });
+          generatedMenu = false;
+          saveState(false);
+          if (connection?.open) {
+            setSyncPaused(true);
+            importSyncId = makeId();
+            if (sendIdeasReset(importSyncId)) {
+              clearTimeout(importSyncTimer);
+              importSyncTimer = setTimeout(() => notify("Import-Abgleich läuft noch. Bitte die Verbindung bestehen lassen."), 12000);
+              notify("Backup geladen. Ideen werden abgeglichen …");
+            } else {
+              importSyncId = null;
+              setSyncPaused(false);
+              notify("Backup lokal geladen. Abgleich konnte nicht gestartet werden.");
+            }
+          } else {
+            notify("Backup geladen. Abstimmungsergebnisse zurückgesetzt.");
+          }
+        } catch (error) { notify(`Import fehlgeschlagen: ${error.message}`); }
+        finally { $("importFile").value = ""; }
+      }
+      async function exportPng() {
+        if (!window.html2canvas) return notify("html2canvas konnte nicht geladen werden.");
+        try {
+          const canvas = await html2canvas($("menuSheet"), { backgroundColor: getComputedStyle($("menuSheet")).backgroundColor, scale: 2 });
+          canvas.toBlob((blob) => { if (blob) downloadFile("menu.png", blob); });
+        } catch { notify("Der PNG-Export ist fehlgeschlagen."); }
+      }
+
+      document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => showTab(tab.id.slice(4))));
+      $("optionForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const id = $("editingId").value; const existing = state.options.find((o) => o.id === id); const now = Date.now();
+        const option = { id: id || makeId(), title: $("optionTitle").value.trim(), description: $("optionDescription").value.trim(), category: $("optionCategory").value, createdBy: existing?.createdBy || state.profile.name, updatedAt: now };
+        if (!option.title) return;
+        state.options = state.options.filter((o) => o.id !== option.id).concat(option);
+        state.deletedOptions = state.deletedOptions.filter((item) => item.id !== option.id);
+        resetForm(); saveState(); notify(existing ? "Idee aktualisiert" : "Idee hinzugefügt");
+      });
+      $("cancelEdit").addEventListener("click", resetForm);
+      $("optionsTable").addEventListener("click", (event) => {
+        const editId = event.target.dataset.edit; const deleteId = event.target.dataset.delete;
+        if (editId) {
+          const option = state.options.find((o) => o.id === editId); if (!option) return;
+          $("editingId").value = option.id; $("optionTitle").value = option.title; $("optionDescription").value = option.description;
+          $("optionCategory").value = option.category; $("formHeading").textContent = "Idee bearbeiten";
+          $("saveOption").textContent = "Änderung speichern"; $("cancelEdit").hidden = false; $("optionTitle").focus();
+        }
+        if (deleteId) {
+          const option = state.options.find((o) => o.id === deleteId); if (!option) return;
+          state.options = state.options.filter((o) => o.id !== deleteId);
+          state.deletedOptions = state.deletedOptions.filter((x) => x.id !== deleteId).concat({ id: deleteId, deletedAt: Date.now() });
+          delete state.votes[deleteId]; saveState(); notify("Idee gelöscht");
+        }
+      });
+      $("voteGroups").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-vote]"); if (!button) return;
+        const { option, vote } = { option: button.dataset.option, vote: button.dataset.vote };
+        state.votes[option] ||= {};
+        if (state.votes[option][state.profile.id] === vote) delete state.votes[option][state.profile.id];
+        else state.votes[option][state.profile.id] = vote;
+        saveState();
+      });
+      $("profileName").addEventListener("change", (event) => {
+        const name = event.target.value.trim().slice(0, 32) || "Gast";
+        state.profile.name = name; state.participants[state.profile.id] = name; event.target.value = name; saveState();
+      });
+      $("themeToggle").addEventListener("click", () => { state.settings.darkMode = !state.settings.darkMode; saveState(); });
+      $("createSession").addEventListener("click", createSession);
+      $("connectSession").addEventListener("click", connectSession);
+      $("peerCode").addEventListener("input", (event) => { event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6); });
+      $("resync").addEventListener("click", () => { sendState(); notify(connection?.open ? "Stand abgeglichen" : "Keine aktive Verbindung"); });
+      $("exportJson").addEventListener("click", exportJson);
+      $("importJson").addEventListener("click", () => $("importFile").click());
+      $("importFile").addEventListener("change", (event) => { if (event.target.files[0]) importJson(event.target.files[0]); });
+      $("generateMenu").addEventListener("click", generateMenu);
+      $("exportPng").addEventListener("click", exportPng);
+      state.participants[state.profile.id] = state.profile.name;
+      render();
+    })();
+  </script>
+</body>
+
+</html>
