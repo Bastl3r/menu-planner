@@ -1202,7 +1202,7 @@
       }
       function connectSession() {
         const code = $("peerCode").value.trim();
-        if (!/^\d{6}$/.test(code)) return notify("Bitte einen 6-stelligen Session-Code eingeben.");
+        if (!/^\d{4}$/.test(code)) return notify("Bitte einen 4-stelligen Session-Code eingeben.");
         if (!window.Peer) return notify("PeerJS konnte nicht geladen werden. Prüfe deine Internetverbindung.");
         closePeer();
         setStatus("connecting", "Verbinde");
