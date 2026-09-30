@@ -994,7 +994,7 @@
       const $ = (id) => document.getElementById(id);
       const makeId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
       const freshState = () => ({
-        profile: { id: makeId(), name: "Gast" }, participants: {}, options: [], deletedOptions: [], votes: {}, voteEpoch: 0, settings: { darkMode: false }
+        profile: { id: makeId(), name: "Gast" }, participants: {}, options: [], deletedOptions: [], votes: {}, voteEpoch: 0, settings: { darkMode: true }
       });
       function normalizeState(value) {
         const base = freshState();
