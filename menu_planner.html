@@ -6,6 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f5f2e9">
   <title>Menu Matcher</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Menu Matcher">
+
   <style>
     :root {
       color-scheme: light;
@@ -1183,7 +1190,7 @@
         if (!window.Peer) return notify("PeerJS konnte nicht geladen werden. Prüfe deine Internetverbindung.");
         closePeer();
         setStatus("connecting", "Session wird erstellt");
-        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const code = String(Math.floor(1000 + Math.random() * 9000));
         peer = new Peer(code, { debug: 0 });
         peer.on("open", (id) => { $("sessionCode").textContent = id; setStatus("", "Nicht verbunden"); notify("Session bereit. Teile den Code."); });
         peer.on("connection", attachConnection);
@@ -1428,6 +1435,19 @@
       $("exportPng").addEventListener("click", exportPng);
       state.participants[state.profile.id] = state.profile.name;
       render();
+
+      // PWA Service Worker Registration 
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js")
+            .then((registration) => {
+              console.log("ServiceWorker registration successful with scope: ", registration.scope);
+            })
+            .catch((err) => {
+              console.error("ServiceWorker registration failed: ", err);
+            });
+        });
+      }
     })();
   </script>
 </body>
