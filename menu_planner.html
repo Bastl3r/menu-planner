@@ -921,6 +921,8 @@
       <button class="tab" id="tab-voting" role="tab" aria-controls="panel-voting"
         aria-selected="false">Abstimmung</button>
       <button class="tab" id="tab-menu" role="tab" aria-controls="panel-menu" aria-selected="false">Menü</button>
+      <button class="tab" id="tab-random" role="tab" aria-controls="panel-random-date"
+        aria-selected="false">Zufallsdate</button>
     </nav>
     <section class="panel active" id="panel-options" role="tabpanel" aria-labelledby="tab-options">
       <div class="section-head">
@@ -979,13 +981,27 @@
           <p>Aus euren Ja- und Vielleicht-Stimmen wird eine Auswahl zusammengestellt.</p>
         </div>
       </div>
-      <div class="menu-toolbar"><button class="btn primary" id="generateMenu" disabled>Menü generieren</button><button
-          class="btn" id="exportPng" disabled>PNG herunterladen</button><span class="eligibility"
-          id="eligibilityText"></span></div>
+      <div class="menu-toolbar">
+        <button class="btn primary" id="generateMenu" disabled>Menü generieren</button>
+        <button class="btn" id="exportPng" disabled>PNG herunterladen</button>
+        <span class="eligibility" id="eligibilityText"></span>
+      </div>
       <div class="menu-sheet" id="menuSheet">
         <div class="menu-note">Euer Menü erscheint hier, sobald ihr beide mindestens drei Gerichte mit Ja bewertet habt.
         </div>
       </div>
+    </section>
+    <section class="panel" id="panel-random-date" role="tabpanel" aria-labelledby="tab-menu">
+      <div class="section-head">
+        <div>
+          <h2>Zufallsdate</h2>
+          <p>Keine Übereinstimmung - purer Zufall.</p>
+        </div>
+      </div>
+      <div class="menu-toolbar">
+        <button class="btn" id="pickRandomDate">Zufallsdate generieren</button>
+      </div>
+      <div class="menu-sheet" id="randomDateResult"></div>
     </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1336,6 +1352,28 @@
         if (!total) { const note = document.createElement("div"); note.className = "menu-note"; note.textContent = "Noch keine passenden Gerichte. Stimmt in weiteren Kategorien ab."; sheet.append(note); }
         generatedMenu = true; renderMenuState();
       }
+      function pickRandomDate() {
+        console.log(state);
+        const dates = state.options || [];
+        if (dates.length === 0) return alert("Add some dates first!");
+        const randomChoice = dates[Math.floor(Math.random() * dates.length)];
+
+        //create display of random date result
+        const sheet = $("randomDateResult"); sheet.classList.add("generated"); sheet.replaceChildren();
+        const brand = document.createElement("div"); brand.className = "menu-brand";
+        brand.innerHTML = '<div class="eyebrow">Zufallsdate</div>';
+        sheet.append(brand);
+        const group = document.createElement("section");
+        group.className = "menu-category";
+        const heading = document.createElement("h3");
+        heading.textContent = CATEGORY_LABELS[randomChoice.category];
+        group.append(heading);
+        const dish = document.createElement("div"); dish.className = "menu-dish";
+        const info = document.createElement("div"); info.innerHTML = '<strong></strong><p></p>';
+        info.querySelector("strong").textContent = randomChoice.title; info.querySelector("p").textContent = randomChoice.description;
+        dish.append(info); group.append(dish);
+        sheet.append(group);
+      }
       function downloadFile(filename, blob) {
         const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = filename; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -1432,6 +1470,7 @@
       $("importJson").addEventListener("click", () => $("importFile").click());
       $("importFile").addEventListener("change", (event) => { if (event.target.files[0]) importJson(event.target.files[0]); });
       $("generateMenu").addEventListener("click", generateMenu);
+      $("pickRandomDate").addEventListener("click", pickRandomDate);
       $("exportPng").addEventListener("click", exportPng);
       state.participants[state.profile.id] = state.profile.name;
       render();
