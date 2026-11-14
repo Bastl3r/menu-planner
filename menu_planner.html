@@ -893,9 +893,9 @@
       <div class="toolbar">
         <div class="peer-tools">
           <button class="btn primary" id="createSession">Session erstellen</button>
-          <span class="session-code" id="sessionCode" aria-label="Session-Code">------</span>
-          <input id="peerCode" inputmode="numeric" maxlength="6" placeholder="Code"
-            aria-label="6-stelliger Session-Code">
+          <span class="session-code" id="sessionCode" aria-label="Session-Code">----</span>
+          <input id="peerCode" inputmode="numeric" maxlength="4" placeholder="Code"
+            aria-label="4-stelliger Session-Code">
           <button class="btn" id="connectSession">Verbinden</button>
           <button class="btn subtle" id="resync" title="Gesamten Stand erneut abgleichen">Abgleichen</button>
         </div>
@@ -1011,10 +1011,13 @@
     (() => {
       "use strict";
       const STORAGE_KEY = "menu-matcher-state-v1";
+      const LAST_PEER_KEY = "menu-matcher-last-peer-v1";
+      const SCHEMA_VERSION = 2;
+      const SYNC_VERSION = 2;
       const CATEGORIES = ["apperitiv", "hauptgericht", "dessert", "sonstiges"];
       const CATEGORY_LABELS = { apperitiv: "Apperitiv", hauptgericht: "Hauptgericht", dessert: "Dessert", sonstiges: "Sonstiges" };
       const VOTE_LABELS = { yes: "Ja", maybe: "Vielleicht", no: "Nein" };
-      const OPTION_ID_RE = /^[0-9a-f]{64}$/;
+      const VOTE_RANK = { no: 1, maybe: 2, yes: 3 };
       const $ = (id) => document.getElementById(id);
       const makeId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
       const rotr = (value, bits) => (value >>> bits) | (value << (32 - bits));
@@ -1063,89 +1066,212 @@
         return h.map((part) => part.toString(16).padStart(8, "0")).join("");
       }
       const optionContentId = ({ title, description, category }) => sha256Hex([category, String(title || ""), String(description || "")].join("\u0000"));
-      function withContentIds(options) {
-        const droppedVoteIds = new Set();
-        const byId = new Map();
-        for (const option of options) {
-          const oldId = option.id;
-          const id = OPTION_ID_RE.test(oldId) ? oldId : optionContentId(option);
-          if (id !== oldId) droppedVoteIds.add(oldId);
-          const candidate = { id, title: option.title, description: option.description, category: option.category, updatedAt: option.updatedAt };
-          const current = byId.get(id);
-          if (!current || candidate.updatedAt > current.updatedAt) byId.set(id, candidate);
-        }
-        const migrated = [...byId.values()];
-        const changed = migrated.length !== options.length || migrated.some((option, index) => option.id !== options[index].id);
-        return { options: migrated, droppedVoteIds, changed };
-      }
       const freshState = () => ({
-        profile: { id: makeId(), name: "Gast" }, participants: {}, options: [], deletedOptions: [], votes: {}, voteEpoch: 0, settings: { darkMode: true }
+        schemaVersion: SCHEMA_VERSION,
+        profile: { id: makeId(), name: "" },
+        participants: {},
+        options: [],
+        deletedOptions: [],
+        votes: {},
+        voteEpoch: 0,
+        settings: { darkMode: true }
       });
+      function compareOptions(a, b) {
+        if (a.updatedAt !== b.updatedAt) return a.updatedAt - b.updatedAt;
+        if (a.contentHash !== b.contentHash) return a.contentHash.localeCompare(b.contentHash);
+        return b.id.localeCompare(a.id);
+      }
+      const betterVote = (a, b) => (VOTE_RANK[a] || 0) >= (VOTE_RANK[b] || 0) ? a : b;
+      function canonicalizeState(value) {
+        const tombstones = new Map();
+        for (const item of value.deletedOptions) tombstones.set(item.id, Math.max(tombstones.get(item.id) || 0, item.deletedAt));
+        value.deletedOptions = [...tombstones].map(([id, deletedAt]) => ({ id, deletedAt })).sort((a, b) => a.id.localeCompare(b.id));
+        const live = value.options.filter((option) => {
+          const deletedAt = tombstones.get(option.id);
+          return deletedAt === undefined || deletedAt < option.updatedAt;
+        });
+        const byId = new Map();
+        for (const option of live) {
+          const current = byId.get(option.id);
+          if (!current || compareOptions(option, current) > 0) byId.set(option.id, option);
+        }
+        const groups = new Map();
+        for (const option of byId.values()) {
+          if (!groups.has(option.contentHash)) groups.set(option.contentHash, []);
+          groups.get(option.contentHash).push(option);
+        }
+        const remap = new Map();
+        const winners = [];
+        for (const group of groups.values()) {
+          let winner = group[0];
+          for (const option of group.slice(1)) if (compareOptions(option, winner) > 0) winner = option;
+          winners.push(winner);
+          for (const option of group) if (option.id !== winner.id) remap.set(option.id, winner.id);
+        }
+        if (remap.size) {
+          const votes = {};
+          for (const [optionId, userVotes] of Object.entries(value.votes)) {
+            const targetId = remap.get(optionId) || optionId;
+            const target = votes[targetId] || (votes[targetId] = {});
+            for (const [userId, vote] of Object.entries(userVotes)) {
+              target[userId] = target[userId] ? betterVote(target[userId], vote) : vote;
+            }
+          }
+          value.votes = votes;
+        }
+        value.options = winners.sort((a, b) => a.id.localeCompare(b.id));
+        const optionIds = new Set(value.options.map((option) => option.id));
+        for (const optionId of Object.keys(value.votes)) {
+          if (!optionIds.has(optionId)) { delete value.votes[optionId]; continue; }
+          for (const userId of Object.keys(value.votes[optionId])) {
+            if (!["yes", "maybe", "no"].includes(value.votes[optionId][userId])) delete value.votes[optionId][userId];
+          }
+          if (!Object.keys(value.votes[optionId]).length) delete value.votes[optionId];
+        }
+        return value;
+      }
       function normalizeState(value) {
         const base = freshState();
         const input = value && typeof value === "object" ? value : {};
         const state = {
-          profile: { id: String(input.profile?.id || base.profile.id), name: String(input.profile?.name || "Gast").slice(0, 32) },
-          participants: input.participants && typeof input.participants === "object" ? { ...input.participants } : {},
-          options: Array.isArray(input.options) ? input.options.filter((o) => o && o.id && CATEGORIES.includes(o.category)).map((o) => ({
-            id: String(o.id), title: String(o.title || "").slice(0, 90), description: String(o.description || "").slice(0, 280), category: o.category,
-            updatedAt: Number(o.updatedAt) || 0
-          })) : [],
-          deletedOptions: Array.isArray(input.deletedOptions) ? input.deletedOptions.filter((x) => x && x.id).map((x) => ({ id: String(x.id), deletedAt: Number(x.deletedAt) || 0 })) : [],
-          votes: input.votes && typeof input.votes === "object" ? input.votes : {},
+          schemaVersion: SCHEMA_VERSION,
+          profile: { id: String(input.profile?.id || base.profile.id), name: String(input.profile?.name ?? "").slice(0, 32).trim() },
+          participants: {},
+          options: [],
+          deletedOptions: [],
+          votes: {},
           voteEpoch: Math.max(0, Number(input.voteEpoch) || 0),
           settings: { darkMode: Boolean(input.settings?.darkMode) }
         };
-        state.participants[state.profile.id] = state.profile.name;
-        for (const [optionId, votes] of Object.entries(state.votes)) {
-          if (!votes || typeof votes !== "object") { delete state.votes[optionId]; continue; }
-          for (const [userId, vote] of Object.entries(votes)) if (!["yes", "maybe", "no"].includes(vote)) delete votes[userId];
+        if (input.participants && typeof input.participants === "object") {
+          for (const [id, name] of Object.entries(input.participants)) {
+            const clean = String(name || "").slice(0, 32).trim();
+            if (id && clean) state.participants[String(id)] = clean;
+          }
         }
-        return state;
+        if (Array.isArray(input.options)) {
+          for (const option of input.options) {
+            if (!option || !CATEGORIES.includes(option.category)) continue;
+            const title = String(option.title || "").slice(0, 90);
+            const description = String(option.description || "").slice(0, 280);
+            const category = option.category;
+            const contentHash = optionContentId({ title, description, category });
+            state.options.push({
+              id: String(option.id || contentHash),
+              title,
+              description,
+              category,
+              updatedAt: Number(option.updatedAt) || 0,
+              contentHash
+            });
+          }
+        }
+        if (Array.isArray(input.deletedOptions)) {
+          for (const item of input.deletedOptions) {
+            if (item && item.id) state.deletedOptions.push({ id: String(item.id), deletedAt: Number(item.deletedAt) || 0 });
+          }
+        }
+        if (input.votes && typeof input.votes === "object") {
+          for (const [optionId, userVotes] of Object.entries(input.votes)) {
+            if (!userVotes || typeof userVotes !== "object") continue;
+            const clean = {};
+            for (const [userId, vote] of Object.entries(userVotes)) {
+              if (["yes", "maybe", "no"].includes(vote)) clean[String(userId)] = vote;
+            }
+            if (Object.keys(clean).length) state.votes[String(optionId)] = clean;
+          }
+        }
+        if (state.profile.name) state.participants[state.profile.id] = state.profile.name;
+        else delete state.participants[state.profile.id];
+        return canonicalizeState(state);
       }
       function stable(value) {
         if (Array.isArray(value)) return value.map(stable);
         if (!value || typeof value !== "object") return value;
         return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
       }
+      function stateHash(value) {
+        const state = normalizeState(value);
+        return sha256Hex(JSON.stringify(stable({
+          schemaVersion: state.schemaVersion,
+          options: state.options,
+          deletedOptions: state.deletedOptions,
+          participants: state.participants,
+          votes: state.votes,
+          voteEpoch: state.voteEpoch
+        })));
+      }
       function mergeStates(local, remoteValue) {
         const remote = normalizeState(remoteValue);
         const result = normalizeState(local);
+        const localId = result.profile.id;
+        const remoteId = remote.profile.id && remote.profile.id !== localId
+          ? remote.profile.id
+          : Object.keys(remote.participants).find((id) => id !== localId) || "";
         const tombstones = new Map();
         for (const item of [...result.deletedOptions, ...remote.deletedOptions]) tombstones.set(item.id, Math.max(tombstones.get(item.id) || 0, item.deletedAt));
-        const options = new Map();
+        const byId = new Map();
         for (const item of [...result.options, ...remote.options]) {
-          const current = options.get(item.id);
-          if (!current || item.updatedAt > current.updatedAt) options.set(item.id, item);
+          const current = byId.get(item.id);
+          if (!current || compareOptions(item, current) > 0) byId.set(item.id, item);
         }
-        result.options = [...options.values()].filter((item) => (tombstones.get(item.id) || 0) < item.updatedAt);
+        result.options = [...byId.values()];
         result.deletedOptions = [...tombstones].map(([id, deletedAt]) => ({ id, deletedAt }));
-        result.participants = { ...result.participants, ...remote.participants };
-        result.participants[result.profile.id] = result.profile.name;
-        if (remote.voteEpoch > result.voteEpoch) {
-          result.voteEpoch = remote.voteEpoch;
-          result.votes = { ...remote.votes };
-        } else if (remote.voteEpoch === result.voteEpoch) {
-          result.votes = { ...result.votes };
-          for (const [optionId, votes] of Object.entries(remote.votes)) result.votes[optionId] = { ...(result.votes[optionId] || {}), ...votes };
+        const votes = {};
+        const optionIds = new Set([...Object.keys(result.votes), ...Object.keys(remote.votes)]);
+        for (const optionId of optionIds) {
+          const userIds = new Set([...Object.keys(result.votes[optionId] || {}), ...Object.keys(remote.votes[optionId] || {})]);
+          for (const userId of userIds) {
+            const localVote = result.votes[optionId]?.[userId];
+            const remoteVote = remote.votes[optionId]?.[userId];
+            let vote;
+            if (userId === localId && localVote) vote = localVote;
+            else if (userId === remoteId && remoteVote) vote = remoteVote;
+            else if (localVote && remoteVote) vote = betterVote(localVote, remoteVote);
+            else vote = localVote || remoteVote;
+            if (vote) (votes[optionId] || (votes[optionId] = {}))[userId] = vote;
+          }
         }
-        result.settings.darkMode = remote.settings.darkMode;
+        result.votes = votes;
+        const participants = {};
+        if (result.profile.name) participants[localId] = result.profile.name;
+        const remoteName = remote.profile.name || remote.participants[remoteId] || result.participants[remoteId] || "";
+        if (remoteId && remoteId !== localId && remoteName) participants[remoteId] = remoteName;
+        result.participants = participants;
+        const allowedUsers = new Set([localId, remoteId].filter(Boolean));
+        for (const userVotes of Object.values(result.votes)) {
+          for (const userId of Object.keys(userVotes)) if (!allowedUsers.has(userId)) delete userVotes[userId];
+        }
+        result.voteEpoch = Math.max(result.voteEpoch, remote.voteEpoch);
         return normalizeState(result);
       }
       function loadState() {
-        try { const saved = localStorage.getItem(STORAGE_KEY); return normalizeState(saved ? JSON.parse(saved) : freshState()); }
-        catch { return freshState(); }
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          const state = normalizeState(saved ? JSON.parse(saved) : freshState());
+          if (state.profile.name === "Gast") {
+            state.profile.name = "";
+            delete state.participants[state.profile.id];
+          }
+          return state;
+        } catch { return freshState(); }
       }
       let state = loadState();
       let peer = null;
       let connection = null;
       let syncTimer = 0;
+      let syncForce = false;
       let syncPaused = false;
       let importSyncId = null;
       let remoteImportSyncId = null;
       let importSyncTimer = 0;
       let toastTimer = 0;
       let generatedMenu = false;
+      let sessionRole = null;
+      let remoteRole = null;
+      let lastSentHash = null;
+      let helloSeen = false;
+      let helloAckSent = false;
 
       function saveState(sync = true) {
         state = normalizeState(state);
@@ -1163,10 +1289,15 @@
         $("statusDot").className = `dot ${status}`;
         $("connectionStatus").textContent = text;
       }
-      function scheduleSync() {
+      function scheduleSync(force = false) {
         if (syncPaused) return;
+        syncForce = syncForce || force;
         clearTimeout(syncTimer);
-        syncTimer = setTimeout(sendState, 160);
+        syncTimer = setTimeout(() => {
+          const shouldForce = syncForce;
+          syncForce = false;
+          sendState(shouldForce);
+        }, 160);
       }
       function setSyncPaused(paused) {
         syncPaused = paused;
@@ -1175,26 +1306,112 @@
         });
         if (!paused) renderMenuState();
       }
-      function sendState() {
-        if (connection?.open && !syncPaused) {
-          try { connection.send({ type: "state", state }); }
-          catch { setStatus("connecting", "Sync wird wiederholt"); }
+      function sendHello() {
+        if (!connection?.open) return false;
+        try {
+          connection.send({ type: "hello", v: SYNC_VERSION, role: sessionRole || "guest", profile: state.profile, hash: stateHash(state) });
+          helloAckSent = true;
+          return true;
+        } catch {
+          setStatus("connecting", "Sync wird wiederholt");
+          return false;
         }
       }
-      function migrateLegacyOptionIds() {
-        const migrated = withContentIds(state.options);
-        if (!migrated.changed) return;
-        state.options = migrated.options;
-        for (const id of migrated.droppedVoteIds) delete state.votes[id];
-        if (migrated.droppedVoteIds.size) state.voteEpoch = Math.max(0, state.voteEpoch) + 1;
-        saveState(false);
+      function sendState(force = false) {
+        if (!connection?.open || syncPaused) return false;
+        const hash = stateHash(state);
+        if (!force && hash === lastSentHash) return true;
+        try {
+          connection.send({ type: "state", v: SYNC_VERSION, state, hash, profile: state.profile });
+          lastSentHash = hash;
+          return true;
+        } catch {
+          setStatus("connecting", "Sync wird wiederholt");
+          return false;
+        }
+      }
+      function peerId() {
+        return Object.keys(state.participants).find((id) => id !== state.profile.id) || "";
+      }
+      function peerName() {
+        const id = peerId();
+        return id ? state.participants[id] || "" : "";
+      }
+      function connectionLabel() {
+        const name = peerName();
+        if (!name) return "Verbunden";
+        return `Verbunden mit ${name}${remoteRole === "host" ? " (Gastgeber)" : ""}`;
+      }
+      function requireProfileName() {
+        const name = $("profileName").value.trim().slice(0, 32);
+        if (!name) {
+          notify("Bitte zuerst deinen Namen eintragen.");
+          $("profileName").focus();
+          return false;
+        }
+        if (name !== state.profile.name) {
+          state.profile.name = name;
+          state.participants[state.profile.id] = name;
+          saveState(false);
+        }
+        return true;
+      }
+      function adoptPeerIdentity(profile) {
+        if (!profile?.id) return false;
+        const id = String(profile.id);
+        if (!id || id === state.profile.id) return false;
+        const name = String(profile.name || "").slice(0, 32).trim() || "Gast";
+        const previousPeerId = localStorage.getItem(LAST_PEER_KEY) || "";
+        let changed = false;
+        const removeParticipant = (participantId) => {
+          if (!participantId || participantId === state.profile.id || participantId === id) return;
+          if (participantId in state.participants) {
+            delete state.participants[participantId];
+            changed = true;
+          }
+        };
+        if (previousPeerId && previousPeerId !== id) removeParticipant(previousPeerId);
+        for (const participantId of Object.keys(state.participants)) removeParticipant(participantId);
+        for (const userVotes of Object.values(state.votes)) {
+          for (const userId of Object.keys(userVotes)) {
+            if (userId !== state.profile.id && userId !== id) {
+              delete userVotes[userId];
+              changed = true;
+            }
+          }
+        }
+        if (state.participants[id] !== name) {
+          state.participants[id] = name;
+          changed = true;
+        }
+        localStorage.setItem(LAST_PEER_KEY, id);
+        return changed;
+      }
+      function persistNormalizedState() {
+        const serialized = JSON.stringify(state);
+        if (localStorage.getItem(STORAGE_KEY) !== serialized) localStorage.setItem(STORAGE_KEY, serialized);
+      }
+      function remapVotesByContentHash(votes, sourceOptions, targetOptions) {
+        const sourceIdToHash = new Map(sourceOptions.map((option) => [option.id, option.contentHash]));
+        const targetByHash = new Map(targetOptions.map((option) => [option.contentHash, option.id]));
+        const targetIds = new Set(targetOptions.map((option) => option.id));
+        const result = {};
+        for (const [optionId, userVotes] of Object.entries(votes)) {
+          const targetId = targetByHash.get(sourceIdToHash.get(optionId)) || optionId;
+          if (!targetIds.has(targetId)) continue;
+          result[targetId] = { ...(result[targetId] || {}), ...userVotes };
+        }
+        return result;
       }
       function applyImportedIdeas(remoteValue) {
         const remote = normalizeState(remoteValue);
-        const remoteOptions = withContentIds(remote.options).options;
-        const importedIds = new Set(remoteOptions.map((option) => option.id));
-        const localVotes = Object.fromEntries(Object.entries(state.votes).filter(([optionId]) => importedIds.has(optionId)));
+        const remoteOptions = remote.options;
+        const localVotes = remapVotesByContentHash(state.votes, state.options, remoteOptions);
         const localProfile = { ...state.profile };
+        const allowedUsers = new Set([remote.profile.id, localProfile.id].filter(Boolean));
+        for (const userVotes of Object.values(localVotes)) {
+          for (const userId of Object.keys(userVotes)) if (!allowedUsers.has(userId)) delete userVotes[userId];
+        }
         state = normalizeState({
           profile: localProfile,
           participants: { [remote.profile.id]: remote.profile.name, [localProfile.id]: localProfile.name },
@@ -1217,14 +1434,33 @@
       function attachConnection(conn) {
         if (connection && connection !== conn) connection.close();
         connection = conn;
+        lastSentHash = null;
+        helloSeen = false;
+        helloAckSent = false;
+        remoteRole = null;
         setStatus("connecting", "Verbinde");
         conn.on("open", () => {
           setStatus("connected", "Verbunden");
-          sendState();
+          sendHello();
+          sendState(true);
           notify("Verbindung hergestellt");
         });
         conn.on("data", (packet) => {
           if (!packet) return;
+          if (packet.type === "hello" && packet.profile) {
+            const changed = adoptPeerIdentity(packet.profile);
+            remoteRole = packet.role === "host" ? "host" : "guest";
+            helloSeen = true;
+            if (!helloAckSent) sendHello();
+            if (changed) saveState(false); else render();
+            setStatus("connected", connectionLabel());
+            sendState(true);
+            return;
+          }
+          if (packet.type === "state-request") {
+            sendState(true);
+            return;
+          }
           if (packet.type === "ideas-reset" && packet.state && packet.transferId) {
             if (syncPaused && remoteImportSyncId !== packet.transferId) return;
             setSyncPaused(true);
@@ -1243,25 +1479,34 @@
             importSyncId = null;
             setSyncPaused(false);
             notify("Import abgeglichen. Stimmen bleiben lokal.");
+            sendState(true);
             return;
           }
           if (packet.type === "ideas-reset-commit" && packet.transferId === remoteImportSyncId) {
             remoteImportSyncId = null;
             setSyncPaused(false);
             notify("Import abgeglichen. Stimmen bleiben lokal.");
+            sendState(true);
             return;
           }
           if (packet.type !== "state" || !packet.state || syncPaused) return;
-          const before = JSON.stringify(stable(state));
+          if (packet.state.profile?.id && !helloSeen) adoptPeerIdentity(packet.state.profile);
+          const beforeHash = stateHash(state);
           state = mergeStates(state, packet.state);
-          const after = JSON.stringify(stable(state));
+          const afterHash = stateHash(state);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           render();
-          if (before !== after) scheduleSync();
+          setStatus("connected", connectionLabel());
+          if (afterHash !== beforeHash) scheduleSync();
+          if (packet.hash && packet.hash !== afterHash) scheduleSync(true);
         });
         conn.on("close", () => {
           if (connection === conn) {
             connection = null;
+            lastSentHash = null;
+            helloSeen = false;
+            helloAckSent = false;
+            remoteRole = null;
             clearTimeout(importSyncTimer);
             importSyncId = null;
             remoteImportSyncId = null;
@@ -1274,10 +1519,16 @@
       function closePeer() {
         if (connection) { connection.close(); connection = null; }
         if (peer) { peer.destroy(); peer = null; }
+        lastSentHash = null;
+        helloSeen = false;
+        helloAckSent = false;
+        remoteRole = null;
       }
       function createSession() {
+        if (!requireProfileName()) return;
         if (!window.Peer) return notify("PeerJS konnte nicht geladen werden. Prüfe deine Internetverbindung.");
         closePeer();
+        sessionRole = "host";
         setStatus("connecting", "Session wird erstellt");
         const code = String(Math.floor(1000 + Math.random() * 9000));
         peer = new Peer(code, { debug: 0 });
@@ -1290,16 +1541,25 @@
         peer.on("disconnected", () => { if (peer && !peer.destroyed) peer.reconnect(); });
       }
       function connectSession() {
+        if (!requireProfileName()) return;
         const code = $("peerCode").value.trim();
         if (!/^\d{4}$/.test(code)) return notify("Bitte einen 4-stelligen Session-Code eingeben.");
         if (!window.Peer) return notify("PeerJS konnte nicht geladen werden. Prüfe deine Internetverbindung.");
         closePeer();
+        sessionRole = "guest";
         setStatus("connecting", "Verbinde");
         peer = new Peer({ debug: 0 });
         peer.on("open", () => attachConnection(peer.connect(code, { reliable: true })));
         peer.on("error", (error) => { setStatus("", "Nicht verbunden"); notify(`PeerJS: ${error.type || "Verbindungsfehler"}`); });
       }
-      function participants() { return Object.entries(state.participants).sort(([a], [b]) => a.localeCompare(b)); }
+      function participants() {
+        const list = [];
+        if (state.profile.name) list.push([state.profile.id, state.profile.name]);
+        for (const [id, name] of Object.entries(state.participants)) {
+          if (id !== state.profile.id && name) list.push([id, name]);
+        }
+        return list;
+      }
       function ownVote(optionId) { return state.votes[optionId]?.[state.profile.id] || ""; }
       function yesCount(userId) { return state.options.filter((option) => state.votes[option.id]?.[userId] === "yes").length; }
       function renderOptions() {
@@ -1399,7 +1659,7 @@
             if (option.category !== category) return null;
             const [a, b] = ids.map((id) => state.votes[option.id]?.[id]);
             if (!a || !b || a === "no" || b === "no" || (a === "maybe" && b === "maybe")) return null;
-            const rank = a === "yes" && b === "yes" ? 3 : a === "yes" && b === "maybe" ? 2 : a === "maybe" && b === "yes" ? 1 : 0;
+            const rank = a === "yes" && b === "yes" ? 3 : (a === "yes" || b === "yes") ? 2 : 0;
             return rank ? { option, rank } : null;
           }).filter(Boolean).sort((a, b) => b.rank - a.rank || a.option.title.localeCompare(b.option.title, "de")).slice(0, 2);
           if (ranked.length) menu[category] = ranked.map(({ option }) => option);
@@ -1426,7 +1686,6 @@
         generatedMenu = true; renderMenuState();
       }
       function pickRandomDate() {
-        console.log(state);
         const dates = state.options || [];
         if (dates.length === 0) return alert("Add some dates first!");
         const randomChoice = dates[Math.floor(Math.random() * dates.length)];
@@ -1453,8 +1712,10 @@
       }
       function exportJson() {
         const payload = {
-          version: 2,
-          options: state.options.map(({ id, title, description, category, updatedAt }) => ({ id, title, description, category, updatedAt }))
+          version: 3,
+          schemaVersion: SCHEMA_VERSION,
+          voteEpoch: state.voteEpoch,
+          options: state.options.map(({ id, title, description, category, updatedAt, contentHash }) => ({ id, title, description, category, updatedAt, contentHash }))
         };
         downloadFile("menu_matcher_backup.json", new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
       }
@@ -1463,10 +1724,13 @@
           const parsed = JSON.parse(await file.text());
           if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.options)) throw new Error("Ungültiges Backup-Format");
           if (!confirm("Der aktuelle Stand wird durch das Backup ersetzt. Fortfahren?")) return;
-          const importedOptions = withContentIds(normalizeState({ options: parsed.options }).options).options;
-          const importedIds = new Set(importedOptions.map((option) => option.id));
-          const localVotes = Object.fromEntries(Object.entries(state.votes).filter(([optionId]) => importedIds.has(optionId)));
+          const importedOptions = normalizeState({ options: parsed.options }).options;
+          const localVotes = remapVotesByContentHash(state.votes, state.options, importedOptions);
           const localProfile = { ...state.profile };
+          const allowedUsers = new Set([localProfile.id]);
+          for (const userVotes of Object.values(localVotes)) {
+            for (const userId of Object.keys(userVotes)) if (!allowedUsers.has(userId)) delete userVotes[userId];
+          }
           state = normalizeState({
             profile: localProfile,
             participants: { [localProfile.id]: localProfile.name },
@@ -1507,15 +1771,30 @@
       document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => showTab(tab.id.slice(4))));
       $("optionForm").addEventListener("submit", (event) => {
         event.preventDefault();
-        const editingId = $("editingId").value; const existing = state.options.find((o) => o.id === editingId); const now = Date.now();
-        const title = $("optionTitle").value.trim().slice(0, 90); const description = $("optionDescription").value.trim().slice(0, 280); const category = $("optionCategory").value;
+        const editingId = $("editingId").value;
+        const existing = editingId ? state.options.find((o) => o.id === editingId) : null;
+        const now = Date.now();
+        const title = $("optionTitle").value.trim().slice(0, 90);
+        const description = $("optionDescription").value.trim().slice(0, 280);
+        const category = $("optionCategory").value;
         if (!title) return;
-        const id = existing ? existing.id : optionContentId({ title, description, category });
-        const duplicate = state.options.find((o) => o.id === id && o.id !== editingId);
-        const option = { id, title, description, category, updatedAt: now };
-        state.options = state.options.filter((o) => o.id !== id).concat(option);
-        state.deletedOptions = state.deletedOptions.filter((item) => item.id !== id);
-        resetForm(); saveState(); notify(existing ? "Idee aktualisiert" : duplicate ? "Idee existiert bereits und wurde aktualisiert" : "Idee hinzugefügt");
+        const contentHash = optionContentId({ title, description, category });
+        let id = existing ? existing.id : "";
+        const duplicate = state.options.find((o) => o.id !== id && o.contentHash === contentHash);
+        if (!id) id = duplicate ? duplicate.id : makeId();
+        if (duplicate && duplicate.id !== id) {
+          for (const [userId, vote] of Object.entries(state.votes[duplicate.id] || {})) {
+            state.votes[id] ||= {};
+            state.votes[id][userId] = state.votes[id][userId] ? betterVote(state.votes[id][userId], vote) : vote;
+          }
+          delete state.votes[duplicate.id];
+        }
+        const option = { id, title, description, category, updatedAt: now, contentHash };
+        state.options = state.options.filter((o) => o.id !== id && o.id !== duplicate?.id).concat(option);
+        state.deletedOptions = state.deletedOptions.filter((item) => item.id !== id && item.id !== duplicate?.id);
+        resetForm();
+        saveState();
+        notify(existing ? "Idee aktualisiert" : duplicate ? "Idee existiert bereits und wurde aktualisiert" : "Idee hinzugefügt");
       });
       $("cancelEdit").addEventListener("click", resetForm);
       $("optionsTable").addEventListener("click", (event) => {
@@ -1542,22 +1821,38 @@
         saveState();
       });
       $("profileName").addEventListener("change", (event) => {
-        const name = event.target.value.trim().slice(0, 32) || "Gast";
-        state.profile.name = name; state.participants[state.profile.id] = name; event.target.value = name; saveState();
+        const name = event.target.value.trim().slice(0, 32);
+        if (!name) {
+          event.target.value = state.profile.name;
+          notify("Bitte einen Namen eingeben.");
+          return;
+        }
+        state.profile.name = name;
+        state.participants[state.profile.id] = name;
+        event.target.value = name;
+        saveState();
       });
       $("themeToggle").addEventListener("click", () => { state.settings.darkMode = !state.settings.darkMode; saveState(); });
       $("createSession").addEventListener("click", createSession);
       $("connectSession").addEventListener("click", connectSession);
-      $("peerCode").addEventListener("input", (event) => { event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6); });
-      $("resync").addEventListener("click", () => { sendState(); notify(connection?.open ? "Stand abgeglichen" : "Keine aktive Verbindung"); });
+      $("peerCode").addEventListener("input", (event) => { event.target.value = event.target.value.replace(/\D/g, "").slice(0, 4); });
+      $("resync").addEventListener("click", () => {
+        if (connection?.open) {
+          sendHello();
+          sendState(true);
+          notify("Stand abgeglichen");
+        } else {
+          notify("Keine aktive Verbindung");
+        }
+      });
       $("exportJson").addEventListener("click", exportJson);
       $("importJson").addEventListener("click", () => $("importFile").click());
       $("importFile").addEventListener("change", (event) => { if (event.target.files[0]) importJson(event.target.files[0]); });
       $("generateMenu").addEventListener("click", generateMenu);
       $("pickRandomDate").addEventListener("click", pickRandomDate);
       $("exportPng").addEventListener("click", exportPng);
-      state.participants[state.profile.id] = state.profile.name;
-      migrateLegacyOptionIds();
+      if (state.profile.name) state.participants[state.profile.id] = state.profile.name;
+      persistNormalizedState();
       render();
 
       // PWA Service Worker Registration 
