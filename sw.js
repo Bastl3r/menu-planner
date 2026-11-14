@@ -1,4 +1,4 @@
-const CACHE_NAME = "menu-matcher-cache-v1";
+const CACHE_NAME = "menu-matcher-cache-v2";
 
 // Static assets to pre-cache upon service worker installation
 const ASSETS_TO_CACHE = [
