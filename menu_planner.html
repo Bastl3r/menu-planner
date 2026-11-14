@@ -1653,16 +1653,34 @@
       function generateMenu() {
         if (!canGenerate()) return;
         const ids = participants().map(([id]) => id).slice(0, 2);
+        const shuffle = (arr) => {
+          const copy = [...arr];
+          for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+          }
+          return copy;
+        };
         const menu = {};
         for (const category of CATEGORIES) {
           const ranked = state.options.map((option) => {
             if (option.category !== category) return null;
             const [a, b] = ids.map((id) => state.votes[option.id]?.[id]);
-            if (!a || !b || a === "no" || b === "no" || (a === "maybe" && b === "maybe")) return null;
-            const rank = a === "yes" && b === "yes" ? 3 : (a === "yes" || b === "yes") ? 2 : 0;
-            return rank ? { option, rank } : null;
-          }).filter(Boolean).sort((a, b) => b.rank - a.rank || a.option.title.localeCompare(b.option.title, "de")).slice(0, 2);
-          if (ranked.length) menu[category] = ranked.map(({ option }) => option);
+            if (!a || !b || a === "no" || b === "no") return null;
+            let rank;
+            if (a === "yes" && b === "yes") rank = 3;       // first: agreement (yes+yes)
+            else if (a === "yes" || b === "yes") rank = 2;  // second: yes+maybe combinations
+            else if (a === "maybe" && b === "maybe") rank = 1; // third: maybe+maybe
+            else return null;
+            return { option, rank };
+          }).filter(Boolean);
+          const tier1 = shuffle(ranked.filter((r) => r.rank === 3).map((r) => r.option));
+          const tier2 = shuffle(ranked.filter((r) => r.rank === 2).map((r) => r.option));
+          const tier3 = shuffle(ranked.filter((r) => r.rank === 1).map((r) => r.option));
+          const selection = [];
+          const take = (pool) => { for (const opt of pool) { if (selection.length < 2) selection.push(opt); } };
+          take(tier1); take(tier2); take(tier3);
+          if (selection.length) menu[category] = selection;
         }
         const sheet = $("menuSheet"); sheet.classList.add("generated"); sheet.replaceChildren();
         const brand = document.createElement("div"); brand.className = "menu-brand";
